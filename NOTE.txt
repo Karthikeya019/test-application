@@ -10,6 +10,9 @@ python -m pip install -r requirements.txt
 
 restarting the backend: python -m uvicorn main:app --reload  
 
+strating frontend: npm run dev 
+
+
 What each does:
 - Creates and activates isolated Python environment.
 - Installs backend dependencies via python -m pip (policy-safe).
