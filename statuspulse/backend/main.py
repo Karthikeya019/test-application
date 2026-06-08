@@ -116,6 +116,14 @@ def cache_delete(key: str) -> None:
         print(f"[cache] WARNING: Redis unavailable ({exc}), skipping cache invalidation")
 
 
+def cache_incr(key: str) -> None:
+    """Increment a Redis counter. Silently skips if Redis is down."""
+    try:
+        redis_client.incr(key)
+    except redis.RedisError:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Seed data — only written when the services table is empty at startup
 # ---------------------------------------------------------------------------
@@ -123,7 +131,7 @@ SEED_SERVICES = [
     dict(id="jira",        name="Jira",         status="operational", check_url=None),
     dict(id="email",       name="Email",        status="degraded",    check_url=None),
     dict(id="google",      name="Google",       status="operational", check_url="https://www.google.com"),
-    dict(id="github",      name="GitHub",       status="operational", check_url="https://api.github.com"),
+    dict(id="github",      name="GitHub",       status="operational", check_url="https://www.github.com"),
     dict(id="outage-demo", name="Outage Demo",  status="operational", check_url="https://httpstat.us/503"),
 ]
 
@@ -172,6 +180,28 @@ class UptimeResponse(BaseModel):
     uptime_percent: float
 
 
+class CheckEntry(BaseModel):
+    status: str
+    response_ms: int | None
+    detail: str | None
+    checked_at: str  # ISO 8601 with UTC marker
+
+
+class HistoryResponse(BaseModel):
+    service_id: str
+    count: int
+    avg_response_ms: int | None
+    latest_response_ms: int | None
+    checks: list[CheckEntry]
+
+
+class CacheStatsResponse(BaseModel):
+    hits: int
+    misses: int
+    total: int
+    hit_rate_percent: float
+
+
 # ---------------------------------------------------------------------------
 # Health-checker
 # ---------------------------------------------------------------------------
@@ -188,7 +218,7 @@ async def check_service(client: httpx.AsyncClient, service_id: str, check_url: s
 
         # status-mapping: 2xx healthy unless slow; anything else is an error
         if response.is_success:
-            if response_ms < 2000:
+            if response_ms < 2500:
                 status = "operational"
                 detail = f"HTTP {response.status_code}, {response_ms}ms"
             else:
@@ -267,6 +297,13 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     seed_if_empty()
 
+    # migrate existing DBs: update github's check_url if it still points at the API
+    # (which returns 403 rate-limit errors and makes the service look degraded)
+    with get_session() as session:
+        gh = session.get(ServiceRow, "github")
+        if gh and gh.check_url == "https://api.github.com":
+            gh.check_url = "https://www.github.com"
+
     # start the background health-checker as a concurrent async task
     task = asyncio.create_task(health_check_loop())
     yield
@@ -304,9 +341,11 @@ def list_services():
     cached = cache_get(CACHE_KEY_SERVICES)
     if cached is not None:
         print(f"CACHE HIT: {CACHE_KEY_SERVICES}")
+        cache_incr("cache:hits")
         return json.loads(cached)
 
     print(f"CACHE MISS: {CACHE_KEY_SERVICES} — fetched from DB")
+    cache_incr("cache:misses")
     with get_session() as session:
         rows = session.query(ServiceRow).all()
         services = [Service.model_validate(r) for r in rows]
@@ -357,6 +396,65 @@ def get_uptime(service_id: str, hours: int = 24):
         operational_checks=operational,
         uptime_percent=uptime_pct,
     )
+
+
+@app.get("/services/{service_id}/history", response_model=HistoryResponse)
+def get_history(service_id: str, limit: int = 60):
+    limit = min(limit, 500)  # cap to prevent runaway queries
+    with get_session() as session:
+        if not session.get(ServiceRow, service_id):
+            raise HTTPException(status_code=404, detail="Service not found")
+
+        rows = (
+            session.query(StatusCheck)
+            .filter(StatusCheck.service_id == service_id)
+            .order_by(StatusCheck.checked_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+        # compute avg over non-null response_ms values in this result set
+        ms_values = [r.response_ms for r in rows if r.response_ms is not None]
+        avg_ms = round(sum(ms_values) / len(ms_values)) if ms_values else None
+        latest_ms = rows[0].response_ms if rows else None
+
+        def fmt_dt(dt: datetime) -> str:
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.isoformat()
+
+        checks = [
+            CheckEntry(
+                status=r.status,
+                response_ms=r.response_ms,
+                detail=r.detail,
+                checked_at=fmt_dt(r.checked_at),
+            )
+            for r in rows
+        ]
+
+    return HistoryResponse(
+        service_id=service_id,
+        count=len(checks),
+        avg_response_ms=avg_ms,
+        latest_response_ms=latest_ms,
+        checks=checks,
+    )
+
+
+@app.get("/cache/stats", response_model=CacheStatsResponse)
+def cache_stats():
+    # read hit/miss counters from Redis; default to 0 if key missing or Redis is down
+    try:
+        hits = int(redis_client.get("cache:hits") or 0)
+        misses = int(redis_client.get("cache:misses") or 0)
+    except redis.RedisError as exc:
+        print(f"[cache] WARNING: Redis unavailable ({exc}), returning zeroed stats")
+        hits, misses = 0, 0
+
+    total = hits + misses
+    hit_rate = round(hits / total * 100, 2) if total > 0 else 0.0
+    return CacheStatsResponse(hits=hits, misses=misses, total=total, hit_rate_percent=hit_rate)
 
 
 class WebhookPayload(BaseModel):
