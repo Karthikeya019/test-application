@@ -36,7 +36,7 @@ Two servers, two terminals.
 ```
 cd statuspulse/backend
 .\venv\Scripts\Activate.ps1      # Windows  (Mac/Linux: source venv/bin/activate)
-python -m uvicorn main:app --reload
+python -m uvicorn main:app --reload   (if main is directly in the backend, else if its in app: python -m uvicorn app.main:app --reload 
 ```
 Backend runs at http://localhost:8000 — interactive API docs at http://localhost:8000/docs
 
