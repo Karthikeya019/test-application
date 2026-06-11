@@ -150,3 +150,26 @@ git branch                        # show branches, * marks current
 # pushes use a browser sign-in (Git Credential Manager) or a Personal Access Token,
 # NOT your GitHub password (passwords are disabled for git).
 
+--- 7) CICD ---
+- Frontend CI failed in `npm ci` with `E401: Incorrect or missing password`.
+- The failure happened because the workflow was trying to use enterprise npm auth/registry settings that are not available from a personal machine or non-enterprise setup.
+- Fix used here: switch the workflow to the generic public npm registry (`https://registry.npmjs.org/`) and remove the unconditional auth step.
+- Keep the enterprise Artifactory registry and token lines only as commented reference in the workflow for future enterprise environments.
+- If you move back to the Lilly/enterprise environment later, restore the Artifactory registry, add the required npm secret, and re-enable auth before `npm ci`.
+- Backend CI: Python 3.11, `pip install -r statuspulse/backend/requirements.txt`, then `python -m pytest`.
+- Frontend CI: Node.js 22, `npm ci`, `npm run lint`, `npm run build` in `statuspulse/frontend`.
+- Commands used while fixing CI:
+	- `git status --short --branch`
+	- `git log --oneline --decorate --graph --max-count=12 --all`
+	- `git remote -v`
+	- `git branch -vv`
+	- `git ls-remote origin refs/heads/feature/add-github-actions`
+	- `git rev-list --left-right --count HEAD...origin/feature/add-github-actions`
+	- `git fetch origin feature/add-github-actions`
+	- `git pull --rebase --autostash origin feature/add-github-actions`
+	- `git stash list`
+	- `git stash drop "stash@{0}"`
+	- `git add .github/workflows/frontend-ci.yml statuspulse/frontend/package-lock.json`
+	- `git commit -m "fix(ci): use public npm registry"`
+	- `git push origin feature/add-github-actions`
+

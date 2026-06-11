@@ -8,29 +8,32 @@ on:
 
 jobs:
   build:
+    runs-on: ubuntu-latest
     permissions:
       contents: read
-    runs-on: ubuntu-latest
     env:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      # Enterprise mirror example:
+      # NPM_REGISTRY_URL: https://elilillyco.jfrog.io/artifactory/api/npm/npm/
+      # NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      NPM_REGISTRY_URL: https://registry.npmjs.org/
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "22"
 
-      - name: Configure npm authentication
-        if: ${{ env.NPM_TOKEN != '' }}
+      - name: Configure npm registry
         run: |
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+          npm config set registry "$NPM_REGISTRY_URL"
 
       - name: Install dependencies
         run: |
           cd statuspulse/frontend
-          npm install
+          npm ci
 
       - name: Lint
         run: |
