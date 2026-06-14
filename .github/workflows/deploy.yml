@@ -9,9 +9,46 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  AWS_REGION: ap-south-1
+  ECR_REGISTRY: 993268717183.dkr.ecr.ap-south-1.amazonaws.com
+  BACKEND_IMAGE: statuspulse-backend
+  FRONTEND_IMAGE: statuspulse-frontend
+
 jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-south-1
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        id: tag
+        run: echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Build and push backend
+        run: |
+          docker build -t $ECR_REGISTRY/$BACKEND_IMAGE:${{ github.sha }} ./statuspulse/backend
+          docker push $ECR_REGISTRY/$BACKEND_IMAGE:${{ github.sha }}
+
+      - name: Build and push frontend
+        run: |
+          docker build -t $ECR_REGISTRY/$FRONTEND_IMAGE:${{ github.sha }} ./statuspulse/frontend
+          docker push $ECR_REGISTRY/$FRONTEND_IMAGE:${{ github.sha }}
+
   deploy-dev:
     runs-on: ubuntu-latest
+    needs: build-and-push
     environment:
       name: dev
     steps:
@@ -23,13 +60,21 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-south-1
 
-      - name: Verify AWS connection
-        run: aws sts get-caller-identity
-
-      - name: Deploy to dev
+      - name: Deploy backend to dev
         run: |
-          echo "Deploying to ${{ secrets.APP_ENV }}"
-          echo "API: ${{ secrets.API_URL }}"
+          aws ecs update-service \
+            --cluster statuspulse-cluster-1 \
+            --service statuspulse-backend-dev \
+            --force-new-deployment \
+            --region ap-south-1
+
+      - name: Deploy frontend to dev
+        run: |
+          aws ecs update-service \
+            --cluster statuspulse-cluster-1 \
+            --service statuspulse-frontend-dev \
+            --force-new-deployment \
+            --region ap-south-1
 
   deploy-qa:
     runs-on: ubuntu-latest
@@ -45,13 +90,21 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-south-1
 
-      - name: Verify AWS connection
-        run: aws sts get-caller-identity
-
-      - name: Deploy to QA
+      - name: Deploy backend to QA
         run: |
-          echo "Deploying to ${{ secrets.APP_ENV }}"
-          echo "API: ${{ secrets.API_URL }}"
+          aws ecs update-service \
+            --cluster statuspulse-cluster-1 \
+            --service statuspulse-backend-dev \
+            --force-new-deployment \
+            --region ap-south-1
+
+      - name: Deploy frontend to QA
+        run: |
+          aws ecs update-service \
+            --cluster statuspulse-cluster-1 \
+            --service statuspulse-frontend-dev \
+            --force-new-deployment \
+            --region ap-south-1
 
   deploy-prod:
     runs-on: ubuntu-latest
@@ -67,10 +120,18 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-south-1
 
-      - name: Verify AWS connection
-        run: aws sts get-caller-identity
-
-      - name: Deploy to prod
+      - name: Deploy backend to prod
         run: |
-          echo "Deploying to ${{ secrets.APP_ENV }}"
-          echo "API: ${{ secrets.API_URL }}"
+          aws ecs update-service \
+            --cluster statuspulse-cluster-1 \
+            --service statuspulse-backend-dev \
+            --force-new-deployment \
+            --region ap-south-1
+
+      - name: Deploy frontend to prod
+        run: |
+          aws ecs update-service \
+            --cluster statuspulse-cluster-1 \
+            --service statuspulse-frontend-dev \
+            --force-new-deployment \
+            --region ap-south-1
