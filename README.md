@@ -289,6 +289,12 @@ git push origin feature/add-github-actions
 
 Now every push/PR triggers automated tests.
 
+### CI/CD Secrets + Environments
+- Keep deploy values in GitHub repo secrets or, better, GitHub Environments like `dev`, `qa`, and `prod`.
+- Typical values: `AWS_ROLE_ARN`, `API_URL`, `DATABASE_URL`, `API_KEY`, `JWT_SECRET`, `SENTRY_DSN`.
+- GitHub injects them at runtime, so each environment can deploy with its own config and approvals.
+- In a real pipeline, `main` can promote `dev` → `qa` → `prod`, with `prod` protected by an approval gate.
+
 ---
 
 ## AWS Integration Path
@@ -362,8 +368,9 @@ CMD ["npm", "start"]
 2. **Develop** → Commit → Push to your fork
 3. **PR** → GitHub Actions runs tests
 4. **Review** → Merge when approved
-5. **Deploy** → GitHub Actions pushes to AWS (ECR → ECS/Fargate)
+5. **Deploy** → GitHub Actions promotes `dev` → `qa` → `prod` using environment secrets and approvals, then later pushes to AWS (ECR → ECS/Fargate)
 
 Ready to test GitHub Actions and AWS integration!
-#   t e s t  
+#   t e s t 
+ 
  

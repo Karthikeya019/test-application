@@ -173,3 +173,16 @@ git branch                        # show branches, * marks current
 	- `git commit -m "fix(ci): use public npm registry"`
 	- `git push origin feature/add-github-actions`
 
+Progress so far:
+- CI/CD basics are now in place: backend CI, frontend CI, and a draft deploy workflow.
+- The frontend registry issue is resolved for the personal repo setup, while the enterprise Artifactory path is kept as a comment for later.
+- Next step is turning the deploy workflow into a real environment-based release pipeline.
+
+How secrets fit into CI/CD:
+- Store secrets in GitHub repository secrets or, better, GitHub Environments like `dev`, `qa`, and `prod`.
+- GitHub injects them at runtime; they are never committed to the repo or shown in logs unless explicitly echoed.
+- Common examples: `AWS_ROLE_ARN`, `DATABASE_URL`, `API_KEY`, `JWT_SECRET`, `SENTRY_DSN`, and environment-specific `API_URL` values.
+- Use different values per environment so dev, qa, and prod can point to different accounts, databases, and third-party keys.
+- In enterprise deployments, the workflow reads those secrets during the job and passes them into AWS, containers, or `.env` files only for that run.
+- For production, pair secrets with an approval gate on the `prod` environment so only approved merges can use the live values.
+
