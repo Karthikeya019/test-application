@@ -42,7 +42,7 @@ function timeAgo(iso: string): string {
   return `${Math.floor(seconds / 86400)}d ago`;
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL;
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
 
 // segment and dot colors — 500/600 weight for accessible contrast on white
 const segmentBg: Record<Service["status"], string> = {

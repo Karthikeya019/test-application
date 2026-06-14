@@ -8,6 +8,12 @@ python -m venv venv
 .\venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 
+--- 1A) PERSONAL COPY (POWERSELL / BACKEND RUN) ---
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\venv\Scripts\Activate.ps1
+$env:HEALTHCHECK_VERIFY_SSL="false"
+.\venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+
 restarting the backend: .\run.ps1  
 
 starting frontend: npm run dev 
